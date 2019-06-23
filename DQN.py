@@ -4,7 +4,7 @@ import numpy as np
 import random
 
 class DQN(object):
-    def __init__(self, learning_rate=None, network_name=None, actions_num=None, state_size=(4, 84, 84), Dim_fuly_conected_lyr=512, save_dir="models/DQN/"):
+    def __init__(self, learning_rate, network_name, actions_num, state_size=(84, 84, 4), Dim_fuly_conected_lyr=512, save_dir="models/DQN/"):
         self.network_name = network_name
         self.save_dir = save_dir
         self.learning_rate = learning_rate
@@ -12,6 +12,13 @@ class DQN(object):
         self.state_size = state_size
         # Size of number of unit in the fully connected layers
         self.Dim_fuly_conected_lyr = Dim_fuly_conected_lyr
+
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        self.sess = tf.Session()
+        # method That create our prediction network and our Target network
+        self.build_Network()
+        self.sess.run(tf.global_variables_initializer())
         # Saving out model Variables
         self.saver = tf.train.Saver()
         self.checkpoint_file = os.path.join(save_dir, 'Deep_QNetwork.ckpt')
@@ -20,10 +27,6 @@ class DQN(object):
         self.params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
                                         scope=self.network_name)
 
-
-        # method That create our prediction network and our Target network
-        self.build_Network()
-
     def build_Network(self):
         with tf.variable_scope(self.network_name):
 
@@ -31,12 +34,12 @@ class DQN(object):
             self._input_states = tf.placeholder(tf.float32, shape=[None, *self.state_size], name="input_states")
 
             # predicted action by the Agent
-            self.actions_ = tf.placeholder(tf.float32, shape=[None, self.actions_num], name="actions_")
+            self.actions_ = tf.placeholder(tf.int32, shape=[None, self.actions_num], name="actions_")
 
             # Target-Q is considered to approximated to "R(s,a) + Gamma * Max{Q(s´, a´ , w)}"
             # TODO Reward normalizing, polyak Avergaing 2000 1/20000, Statics Simulation, Reducing
             # TODO Cut the image, Image skipping  -> Later
-            self._Q_target = tf.placeholder(tf.float32, shape=[None], name="Target-Q Values")
+            self._Q_target = tf.placeholder(tf.float32, shape=[None], name="Target_Q_Values")
 
             #####IMPORTANT##############
             """When initializing a deep network, it is in principle advantageous to keep the scale of the input variance constant, 
@@ -51,35 +54,35 @@ class DQN(object):
             ####Convolution network#####
             #TODO TRY the different Activation function, and with kernel initializer like Xavier Initializer
             #1st CONV_LAYER
-            first_conv_layer = tf.layers.Conv2D(self._input_states, filters=32,
+            first_conv_layer = tf.layers.conv2d(self._input_states, filters=32,
                                                 kernel_size=(8, 8), strides=4, name="1st_conv_layer",
                                                 kernel_initializer=tf.variance_scaling_initializer(scale=2))
             activated_first_conv_layer = tf.nn.relu(first_conv_layer)
 
             # 2nd CONV_LAYER
-            second_conv_layer = tf.layers.Conv2D(activated_first_conv_layer, filters=64,
+            second_conv_layer = tf.layers.conv2d(activated_first_conv_layer, filters=64,
                                                  kernel_size=(4, 4), strides=2, name="2nd_conv_layer",
                                                  kernel_initializer=tf.variance_scaling_initializer(scale=2))
             activated_second_conv_layer = tf.nn.relu(second_conv_layer)
 
             #3rd CONV_LAYER
-            third_conv_layer = tf.layers.Conv2D(activated_second_conv_layer, filters=64,
+            third_conv_layer = tf.layers.conv2d(activated_second_conv_layer, filters=64,
                                                 kernel_size=(3, 3), strides=1, name="3rd_conv_layer",
                                                 kernel_initializer=tf.variance_scaling_initializer(scale=2))
             activated_third_conv_layer = tf.nn.relu(third_conv_layer)
 
             ####Flatten_CONV_LAYERS_OUTPUT####
-            flatten_cov = tf.layers.Flatten(activated_third_conv_layer, name="flattened_output")
+            flatten_cov = tf.layers.flatten(activated_third_conv_layer, name="flattened_output")
 
             ####DENSE_HIDDEN_LAYER######
-            first_dense_layer = tf.layers.Dense(flatten_cov, units=self.Dim_fuly_conected_lyr,
+            first_dense_layer = tf.layers.dense(flatten_cov, units=self.Dim_fuly_conected_lyr,
                                                 activation=tf.nn.relu,
                                                 kernel_initializer=tf.variance_scaling_initializer(scale=2),
                                                 name="1st_Dense_layer")
 
             #####OUTPUT LAYER_is the predicted action of the Network#########
             #number of units equal to the number of action_space
-            self._predicted_action = tf.layers.Dense(first_dense_layer, unit=self.actions_num,
+            self._predicted_action = tf.layers.dense(first_dense_layer, units=self.actions_num,
                                                         kernel_initializer=tf.variance_scaling_initializer(scale=2),
                                                         name="Actions")
 
@@ -98,16 +101,16 @@ class DQN(object):
             ####TRAINING####
             self.optimization = tf.train.AdamOptimizer(self.learning_rate).minimize(self._cost)
 
-    def create_session(self, session):
-        self.session = session
+    # def create_session(self, session):
+    #     self.session = session
 
     # calculation Action-Q-Values for the given input state
     def predict(self, states):
-        return self.session.run(self._actions_q_value, feed_dict={self._input_states: states})
+        return self.sess.run(self._actions_q_value, feed_dict={self._input_states: states})
 
     #input the target, states, actions from the eviroment to update the weights(Qtheta) of Q(s,a|Qtheta)
     def training(self, targets, states, actions):
-        cost, _ = self.session.run([self._cost, self.optimization],
+        cost, _ = self.sess.run([self._cost, self.optimization],
                                 feed_dict={self.actions_: actions,
                                            self._input_states: states,
                                            self._Q_target: targets})
@@ -122,7 +125,7 @@ class DQN(object):
     # Soft update: polyak averaging.
     def polyek_target_n_update(self, other_network, tau=0.05):
         #self.params is the variables of the target network
-        self.session.run([v_t.assign(v_t * (1. - tau) + v * tau) for v_t, v in zip(self.params, other_network.self.params)])
+        self.sess.run([v_t.assign(v_t * (1. - tau) + v * tau) for v_t, v in zip(self.params, other_network.self.params)])
 
     def learn(self, model, target_model, experience_replay_buffer, gamma, batch_size):
         # Sample experiences
@@ -137,11 +140,21 @@ class DQN(object):
         loss = model.update(states, actions, targets)
         return loss
 
-    def chk_pnt_load(self, session):
-        self.saver.restore(session, self.save_dir)
+    def chk_pnt_load(self):
+        try:
+            print("...Loading check point...")
+            self.saver.restore(self.sess, self.checkpoint_file)
+            load_was_successful = True
+        except:
+            print("...No saved model to Load...")
+            load_was_successful = False
+        else:
+            print("loaded model :{}".format(self.checkpoint_file))
 
-    def chk_pnt_save(self, session):
-        self.saver.save(session, self.save_dir)
+
+    def chk_pnt_save(self):
+        print("...Saving check point...")
+        self.saver.save(self.sess, self.checkpoint_file)
 
 
 
