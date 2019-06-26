@@ -3,7 +3,6 @@ from Utils import Utils
 from datetime import datetime
 
 import gym
-import sys
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -14,12 +13,13 @@ MAX_Exp = 500000
 Min_Exp = 500
 Target_Update_period = 10000
 action_size = 4 # env.action_space.n
+plt.interactive(False)
 
 if __name__ == "__main__":
     # hyper parameters
     gamma = 0.99
     batch_sz = 32
-    num_episodes = 100
+    num_episodes = 10
     total_t = 0
     experience_replay_buffer = []
     episode_rewards = np.zeros(num_episodes)
@@ -34,8 +34,8 @@ if __name__ == "__main__":
     # create Atari Environment
     env = gym.envs.make("Breakout-v0")
 
-
-# Create original and Target Network
+    tf.reset_default_graph()
+    # Create original and Target Network
     model = DQN(learning_rate=learning_rate, network_name="model", actions_num=action_size)
     target_model = DQN(learning_rate=learning_rate, network_name="target_model", actions_num=action_size)
 
@@ -44,6 +44,12 @@ if __name__ == "__main__":
         target_model.create_session(sess)
         sess.run(tf.global_variables_initializer())
         model.chk_pnt_load()
+        writer = tf.summary.FileWriter("/tensorboard/dqn/1/")
+        writer.add_graph(sess.graph)
+
+        ## Losses
+        tf.summary.scalar("Loss", model._cost)
+        write_op = tf.summary.merge_all()
 
         print("... Pushing into experience_replay_buffer....")
         # reseting the Atari Env.
@@ -91,16 +97,18 @@ if __name__ == "__main__":
             total_training_time = 0
             episode_steps = 0
             episode_reward = 0
-            # Reset the Graph
 
+            # Reset the Graph
             done = False
             while not done:
                 env.render()
+                tf.print(target_model._cost, [target_model._cost])
                 #update target network
                 if total_t % Target_Update_period == 0:
                     target_model.polyek_target_n_update(model.params)
                     print("Copied model parameters to target network. total_t = %s, period = %s" % (total_t,
                                                                                                 Target_Update_period))
+                tf.print(target_model._cost, [target_model._cost])
                 # take action
                 action =model.eps_explore(epsilon, state)
                 obs, reward, done, _ = env.step(action)
@@ -134,23 +142,27 @@ if __name__ == "__main__":
             time_per_step = total_training_time / episode_steps
 
             last_100_avg = episode_rewards[max(0, i-100):i +1].mean()
-            last_100_avgs.append(last_100_avgs)
+            last_100_avgs.append(last_100_avg)
             print("\n Episode:", i, "\n Duration:", duration, "\n Num steps:", num_episodes, "\n Reward:", episode_reward,
                 "\n Training time per step:", "%.3f" % time_per_step, "\n Avg Reward (last 100):", "%.3f" % last_100_avg,
                 "\n Epsilon:", "%.3f" % epsilon)
 
-
             if i % 50 == 0:
                 model.chk_pnt_save(i)
-            sys.stdout.flush()
 
+        print("env close")
         env.close()
-
+        print("env closed")
+        print("ploting")
         #plots
-    plt.plot(last_100_avgs)
-    plt.xlabel("Episodes")
-    plt.ylabel("Average Rewards")
-    plt.show()
+        print(last_100_avgs)
+        plt.plot(last_100_avgs)
+        print("ploting")
+        plt.xlabel("Episodes")
+        print("ploting")
+        plt.ylabel("Average Rewards")
+        print("ploting")
+        plt.show()
 
 
 

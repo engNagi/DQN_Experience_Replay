@@ -4,8 +4,6 @@ import numpy as np
 import random
 
 
-
-
 class DQN(object):
     def __init__(self, learning_rate, network_name, actions_num, state_size=(84, 84, 4), Dim_fuly_conected_lyr=512, save_dir="models/DQN/"):
         self.network_name = network_name
@@ -15,19 +13,12 @@ class DQN(object):
         self.state_size = state_size
         # Size of number of unit in the fully connected layers
         self.Dim_fuly_conected_lyr = Dim_fuly_conected_lyr
-        #self.sess = tf.Session()
-        # method That create our prediction network and our Target network
-        self.build_Network()
-        #elf.sess.run(tf.global_variables_initializer())
-        # Saving out model Variables
-        #self.saver = tf.train.Saver()
         self.checkpoint_file = os.path.join(save_dir, 'Deep_QNetwork.ckpt')
         # Keep track of Trainable variable in the network with corresponding name
         # to copy one network to another
         self.params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
                                         scope=self.network_name)
 
-    def build_Network(self):
         with tf.variable_scope(self.network_name):
             # variable for the input to the both networks which is the states
             self._input_states = tf.placeholder(tf.float32, [None, *self.state_size], name="input_states")
