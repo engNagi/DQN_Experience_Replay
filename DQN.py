@@ -3,6 +3,9 @@ import tensorflow as tf
 import numpy as np
 import random
 
+
+
+
 class DQN(object):
     def __init__(self, learning_rate, network_name, actions_num, state_size=(84, 84, 4), Dim_fuly_conected_lyr=512, save_dir="models/DQN/"):
         self.network_name = network_name
@@ -12,15 +15,12 @@ class DQN(object):
         self.state_size = state_size
         # Size of number of unit in the fully connected layers
         self.Dim_fuly_conected_lyr = Dim_fuly_conected_lyr
-
-        config = tf.ConfigProto()
-        config.gpu_options.allow_growth = True
-        self.sess = tf.Session()
+        #self.sess = tf.Session()
         # method That create our prediction network and our Target network
         self.build_Network()
-        self.sess.run(tf.global_variables_initializer())
+        #elf.sess.run(tf.global_variables_initializer())
         # Saving out model Variables
-        self.saver = tf.train.Saver()
+        #self.saver = tf.train.Saver()
         self.checkpoint_file = os.path.join(save_dir, 'Deep_QNetwork.ckpt')
         # Keep track of Trainable variable in the network with corresponding name
         # to copy one network to another
@@ -29,17 +29,17 @@ class DQN(object):
 
     def build_Network(self):
         with tf.variable_scope(self.network_name):
-
             # variable for the input to the both networks which is the states
-            self._input_states = tf.placeholder(tf.float32, shape=[None, *self.state_size], name="input_states")
+            self._input_states = tf.placeholder(tf.float32, [None, *self.state_size], name="input_states")
 
             # predicted action by the Agent
-            self.actions_ = tf.placeholder(tf.int32, shape=[None, self.actions_num], name="actions_")
+            self.actions_ = tf.placeholder(tf.int32, [None,], name="actions_")
 
             # Target-Q is considered to approximated to "R(s,a) + Gamma * Max{Q(s´, a´ , w)}"
-            # TODO Reward normalizing, polyak Avergaing 2000 1/20000, Statics Simulation, Reducing
+            # TODO Reward normalizing, Statics Simulation
+            # TODO polyak Avergaing 2000 1/20000-> Done,
             # TODO Cut the image, Image skipping  -> Later
-            self._Q_target = tf.placeholder(tf.float32, shape=[None], name="Target_Q_Values")
+            self._Q_target = tf.placeholder(tf.float32, [None, ], name="Target_Q_Values")
 
             #####IMPORTANT##############
             """When initializing a deep network, it is in principle advantageous to keep the scale of the input variance constant, 
@@ -49,10 +49,7 @@ class DQN(object):
              +-(sqrt(6)/sqrt(ni + ni+1)) where nᵢ is the number of incoming network connections, or “fan-in,” to 
              the layer, and nᵢ₊₁ is the number of outgoing network connections from that layer, also known as the “fan-out.”
             """
-
-
             ####Convolution network#####
-            #TODO TRY the different Activation function, and with kernel initializer like Xavier Initializer
             #1st CONV_LAYER
             first_conv_layer = tf.layers.conv2d(self._input_states, filters=32,
                                                 kernel_size=(8, 8), strides=4, name="1st_conv_layer",
@@ -101,16 +98,18 @@ class DQN(object):
             ####TRAINING####
             self.optimization = tf.train.AdamOptimizer(self.learning_rate).minimize(self._cost)
 
-    # def create_session(self, session):
-    #     self.session = session
+    def create_session(self, session):
+        self.session = session
 
     # calculation Action-Q-Values for the given input state
     def predict(self, states):
-        return self.sess.run(self._actions_q_value, feed_dict={self._input_states: states})
+        states = np.moveaxis(states, 1, -1)
+        return self.session.run(self._predicted_action, feed_dict={self._input_states: states})
 
     #input the target, states, actions from the eviroment to update the weights(Qtheta) of Q(s,a|Qtheta)
     def training(self, targets, states, actions):
-        cost, _ = self.sess.run([self._cost, self.optimization],
+        states = np.moveaxis(states, 1, -1)
+        cost, _ = self.session.run([self._cost, self.optimization],
                                 feed_dict={self.actions_: actions,
                                            self._input_states: states,
                                            self._Q_target: targets})
@@ -125,7 +124,7 @@ class DQN(object):
     # Soft update: polyak averaging.
     def polyek_target_n_update(self, other_network, tau=0.05):
         #self.params is the variables of the target network
-        self.sess.run([v_t.assign(v_t * (1. - tau) + v * tau) for v_t, v in zip(self.params, other_network.self.params)])
+        self.session.run([v_t.assign(v_t * (1. - tau) + v * tau) for v_t, v in zip(self.params, other_network)])
 
     def learn(self, model, target_model, experience_replay_buffer, gamma, batch_size):
         # Sample experiences
@@ -135,26 +134,28 @@ class DQN(object):
         next_Qs = target_model.predict(next_states)
         next_Q = np.amax(next_Qs, axis=1)
         targets = rewards + np.invert(dones).astype(np.float32) * gamma * next_Q
-
         # Update model
-        loss = model.update(states, actions, targets)
+        loss = model.training(targets, states, actions)
         return loss
 
     def chk_pnt_load(self):
+        self.saver = tf.train.Saver(tf.global_variables())
+        load_was_successful = True
+
         try:
             print("...Loading check point...")
-            self.saver.restore(self.sess, self.checkpoint_file)
-            load_was_successful = True
+            chk_pnt = tf.train.get_checkpoint_state(self.checkpoint_file)
+            load_dir = chk_pnt.model_checkpoint_path
+            self.saver.restore(self.session, load_dir)
         except:
             print("...No saved model to Load...")
             load_was_successful = False
         else:
-            print("loaded model :{}".format(self.checkpoint_file))
+            print("loaded model :{}".format(load_dir))
+            saver = tf.train.Saver(tf.global_variables())
 
-
-    def chk_pnt_save(self):
+    def chk_pnt_save(self, n):
         print("...Saving check point...")
-        self.saver.save(self.sess, self.checkpoint_file)
-
-
+        self.saver.save(self.session, self.checkpoint_file, global_step=n)
+        print("Model Saved # {}".format(n))
 

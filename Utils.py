@@ -5,9 +5,6 @@ from skimage.transform import resize
 class Utils(object):
     def __init__(self, frame):
         self.frame = frame
-        self._grey_scale()
-        self._resize(self.frame)
-        self._stack_frames()
 
     def _grey_scale(self):
         return np.mean(self.frame, axis=2)
@@ -22,9 +19,10 @@ class Utils(object):
     def _stack_frames(self):
         i = 0
         stacked_frames = []
-        while i != 3:
+        while i != 4:
             processed_frame = self._preprocess()
             stacked_frames.append(processed_frame)
-        return np.array(stacked_frames)
+            i += 1
+        return np.moveaxis(np.array(stacked_frames), 1, -1)
 
 
