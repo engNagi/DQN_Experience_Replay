@@ -16,8 +16,6 @@ class DQN(object):
         self.checkpoint_file = os.path.join(save_dir, 'Deep_QNetwork.ckpt')
         # Keep track of Trainable variable in the network with corresponding name
         # to copy one network to another
-        self.params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
-                                        scope=self.network_name)
 
         with tf.variable_scope(self.network_name):
             # variable for the input to the both networks which is the states
@@ -113,9 +111,25 @@ class DQN(object):
             return np.argmax(self.predict([state])[0])
 
     # Soft update: polyak averaging.
-    def polyek_target_n_update(self, other_network, tau=0.05):
-        #self.params is the variables of the target network
-        self.session.run([v_t.assign(v_t * (1. - tau) + v * tau) for v_t, v in zip(self.params, other_network)])
+    def polyek_target_n_update(self, mine, other, tau=0.05):
+        # Get all the variables in the Q primary network.
+        q_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="other")
+        # Get all the variables in the Q target network.
+        q_target_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="mine")
+        assert len(q_vars) == len(q_target_vars)
+
+        # q_target_vars = [t for t in tf.trainable_variables() if t.name.startswith(mine)]
+        # q_target_vars = sorted(q_target_vars, key=lambda v: v.name)
+        # q_vars = [t for t in tf.trainable_variables() if t.name.startswith(other)]
+        # q_vars = sorted(q_vars, key=lambda v: v.name)
+
+        # ops = []
+        # for q_target_vars, q_vars in zip(q_target_vars, q_vars):
+        #     actual = self.session.run(q_vars)
+        #     op = q_target_vars.assign(actual)
+        #     ops.append(op)
+
+        self.session.run([v_t.assign(v_t * (1. - tau) + v * tau) for v_t, v in zip(q_target_vars, q_vars)])
 
     def learn(self, model, target_model, experience_replay_buffer, gamma, batch_size):
         # Sample experiences
